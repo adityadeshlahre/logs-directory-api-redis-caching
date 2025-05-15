@@ -16,12 +16,19 @@ type RedisCache struct {
 	client *redis.Client
 }
 
-func NewRedisCache(redisAddr string) *RedisCache {
+func NewRedisCache(redisAddr string) (*RedisCache, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	client := redis.NewClient(&redis.Options{
-		Addr: redisAddr, // e.g., "localhost:6379"
+		Addr: redisAddr,
 	})
 
-	return &RedisCache{client: client}
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, err
+	}
+
+	return &RedisCache{client: client}, nil
 }
 
 func (c *RedisCache) AddLog(log models.LogEntry) error {

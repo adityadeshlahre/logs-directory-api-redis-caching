@@ -26,6 +26,10 @@ func NewMongoStore(uri, dbName, collectionName string) (*MongoStore, error) {
 		return nil, err
 	}
 
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, err
+	}
+
 	collection := client.Database(dbName).Collection(collectionName)
 	return &MongoStore{Client: client, Collection: collection}, nil
 }
