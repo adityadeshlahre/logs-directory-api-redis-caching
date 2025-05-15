@@ -17,7 +17,7 @@ type MongoStore struct {
 }
 
 func NewMongoStore(uri, dbName, collectionName string) (*MongoStore, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	clientOpts := options.Client().ApplyURI(uri)
@@ -36,7 +36,7 @@ func (m *MongoStore) SaveLog(log models.LogEntry) error {
 }
 
 func (m *MongoStore) GetLogsByUser(userID string, limit int64) ([]models.LogEntry, error) {
-	filter := map[string]interface{}{"userid": userID}
+	filter := map[string]any{"userid": userID}
 	cur, err := m.Collection.Find(context.Background(), filter, options.Find().SetLimit(limit))
 	if err != nil {
 		return nil, err
@@ -57,9 +57,9 @@ func (m *MongoStore) GetLogsByUser(userID string, limit int64) ([]models.LogEntr
 
 func (m *MongoStore) SearchLogs(userID string, query string) ([]models.LogEntry, error) {
 	fmt.Println("Searching logs for user:", userID, "with query:", query)
-	filter := map[string]interface{}{
+	filter := map[string]any{
 		"userid": userID,
-		"level": map[string]interface{}{
+		"level": map[string]any{
 			"$regex":   query,
 			"$options": "i",
 		},
@@ -84,4 +84,17 @@ func (m *MongoStore) SearchLogs(userID string, query string) ([]models.LogEntry,
 		return nil, err
 	}
 	return logs, nil
+}
+
+func (m *MongoStore) GetLogByID(userID, logID string) (*models.LogEntry, error) {
+	filter := map[string]any{
+		"userid": userID,
+		"logid":  logID,
+	}
+	var logEntry models.LogEntry
+	err := m.Collection.FindOne(context.Background(), filter).Decode(&logEntry)
+	if err != nil {
+		return nil, err
+	}
+	return &logEntry, nil
 }

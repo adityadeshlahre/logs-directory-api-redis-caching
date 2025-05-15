@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -17,12 +18,13 @@ var messages = []string{
 	"Session invalidated manually",
 }
 
-var userIDs = []string{"user-123", "user-456", "user-789"}
+var userIDs = []string{"1", "2", "3"}
 
 func StartLogGenerator(out chan<- models.LogEntry, interval time.Duration) {
 	go func() {
 		for {
 			log := models.LogEntry{
+				LogID:     fmt.Sprintf("%04d", rand.Intn(10000)),
 				Timestamp: time.Now().UTC(),
 				Level:     randChoice(logLevels),
 				Component: randChoice(components),

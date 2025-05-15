@@ -29,11 +29,7 @@ func main() {
 	go generator.StartLogGenerator(logsChannel, 10*time.Second)
 	go func() {
 		for logEntry := range logsChannel {
-			err := redisCache.AddLog(logEntry)
-			if err != nil {
-				log.Printf("Error adding log to cache: %v", err)
-			}
-			err = mongoStore.SaveLog(logEntry)
+			err := mongoStore.SaveLog(logEntry)
 			if err != nil {
 				log.Printf("Error saving log to MongoDB: %v", err)
 			}
@@ -42,7 +38,7 @@ func main() {
 
 	r := gin.Default()
 
-	r.GET("/logs", func(c *gin.Context) {
+	r.GET("/:userId/logs", func(c *gin.Context) {
 		page := c.DefaultQuery("page", "1")
 		limit := c.DefaultQuery("limit", "5")
 
@@ -53,9 +49,9 @@ func main() {
 		}
 
 		offset := pagination.Skip
-
+		userId := c.Param("userId")
 		// 1. Try Redis
-		logs, totalLogs, err := redisCache.GetLogs("user-123", offset, pagination.Limit)
+		logs, totalLogs, err := redisCache.GetLogs(userId, offset, pagination.Limit)
 		if err == nil && len(logs) > 0 {
 			log.Println("[CACHE HIT] Logs fetched from Redis")
 			c.JSON(http.StatusOK, gin.H{
@@ -70,7 +66,7 @@ func main() {
 
 		// 2. Cache miss: Fetch from Mongo
 		log.Println("[CACHE MISS] Fetching logs from MongoDB")
-		mongoLogs, err := mongoStore.GetLogsByUser("user-123", int64(pagination.Limit))
+		mongoLogs, err := mongoStore.GetLogsByUser(userId, int64(pagination.Limit))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch from MongoDB"})
 			return
@@ -89,11 +85,11 @@ func main() {
 		})
 	})
 
-	r.GET("/logs/search", func(c *gin.Context) {
+	r.GET("/:userId/logs/search", func(c *gin.Context) {
 		query := c.DefaultQuery("q", "")
-
+		userId := c.Param("userId")
 		// 1. Try Redis cache first
-		logs, err := redisCache.SearchLogs("user-123", query)
+		logs, err := redisCache.SearchLogs(userId, query)
 		if err == nil && len(logs) > 0 {
 			log.Println("[CACHE HIT] Search logs from Redis")
 			c.JSON(http.StatusOK, gin.H{
@@ -104,7 +100,7 @@ func main() {
 
 		// 2. Cache miss, try MongoDB
 		log.Println("[CACHE MISS] Search logs from MongoDB")
-		mongoLogs, err := mongoStore.SearchLogs("user-123", query)
+		mongoLogs, err := mongoStore.SearchLogs(userId, query)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "MongoDB search failed"})
 			return
@@ -116,6 +112,38 @@ func main() {
 
 		c.JSON(http.StatusOK, gin.H{
 			"logs": mongoLogs,
+		})
+	})
+
+	r.GET("/:userId/:logId", func(c *gin.Context) {
+		logId := c.Param("logId")
+
+		userId := c.Param("userId")
+		// 1. Try Redis cache first
+		logEntry, err := redisCache.GetLogByID(userId, logId)
+		if err == nil && logEntry != nil {
+			log.Println("[CACHE HIT] Log fetched from Redis")
+			c.JSON(http.StatusOK, gin.H{
+				"log": logEntry,
+			})
+			return
+		}
+		// 2. Cache miss, try MongoDB
+		log.Println("[CACHE MISS] Fetching log from MongoDB")
+		mongoLog, err := mongoStore.GetLogByID(userId, logId)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch from MongoDB"})
+			return
+		}
+		if mongoLog == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Log not found"})
+			return
+		}
+
+		_ = redisCache.AddLog(*mongoLog)
+
+		c.JSON(http.StatusOK, gin.H{
+			"log": mongoLog,
 		})
 	})
 
